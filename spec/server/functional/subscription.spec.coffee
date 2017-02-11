@@ -625,9 +625,13 @@ describe 'Subscriptions', ->
               done()
 
   describe 'APIs', ->
+    # TODO: Refactor these tests to be use yield, be independent of one another, and move to products.spec.coffee
     subscriptionURL = getURL('/db/subscription')
+    purchaseYearSaleUrl = null
     beforeEach utils.wrap (done) ->
       yield utils.populateProducts()
+      product = yield Product.findOne({name: 'year_subscription'})
+      purchaseYearSaleUrl = getURL("/db/products/#{product.id}/purchase")
       done()
 
     it 'year_sale', (done) ->
@@ -641,7 +645,7 @@ describe 'Subscriptions', ->
               stripe:
                 token: token.id
                 timestamp: new Date()
-            request.put {uri: "#{subscriptionURL}/-/year_sale", json: requestBody, headers: headers }, (err, res) ->
+            request.post {uri: purchaseYearSaleUrl, json: requestBody, headers: headers }, (err, res) ->
               expect(err).toBeNull()
               expect(res.statusCode).toBe(200)
               User.findById user1.id, (err, user1) ->
@@ -675,7 +679,7 @@ describe 'Subscriptions', ->
                 stripe:
                   token: token.id
                   timestamp: new Date()
-              request.put {uri: "#{subscriptionURL}/-/year_sale", json: requestBody, headers: headers }, (err, res) ->
+              request.post {uri: purchaseYearSaleUrl, json: requestBody, headers: headers }, (err, res) ->
                 expect(err).toBeNull()
                 expect(res.statusCode).toBe(200)
                 User.findById user1.id, (err, user1) ->
@@ -711,7 +715,7 @@ describe 'Subscriptions', ->
                 stripe:
                   token: token.id
                   timestamp: new Date()
-              request.put {uri: "#{subscriptionURL}/-/year_sale", json: requestBody, headers: headers }, (err, res) ->
+              request.post {uri: purchaseYearSaleUrl, json: requestBody, headers: headers }, (err, res) ->
                 expect(err).toBeNull()
                 expect(res.statusCode).toBe(200)
                 User.findById user1.id, (err, user1) ->
@@ -747,7 +751,7 @@ describe 'Subscriptions', ->
                 stripe:
                   token: token.id
                   timestamp: new Date()
-              request.put {uri: "#{subscriptionURL}/-/year_sale", json: requestBody, headers: headers }, (err, res) ->
+              request.post {uri: purchaseYearSaleUrl, json: requestBody, headers: headers }, (err, res) ->
                 expect(err).toBeNull()
                 expect(res.statusCode).toBe(200)
                 User.findById user1.id, (err, user1) ->
@@ -789,7 +793,7 @@ describe 'Subscriptions', ->
                       stripe:
                         token: token.id
                         timestamp: new Date()
-                    request.put {uri: "#{subscriptionURL}/-/year_sale", json: requestBody, headers: headers }, (err, res) ->
+                    request.post {uri: purchaseYearSaleUrl, json: requestBody, headers: headers }, (err, res) ->
                       expect(err).toBeNull()
                       expect(res.statusCode).toBe(200)
                       User.findById user1.id, (err, user1) ->
@@ -898,32 +902,3 @@ describe 'DELETE /db/user/:handle/stripe/recipients/:recipientHandle', ->
     expect((yield User.findById(@recipient2.id)).get('stripe')).toBeDefined()
 
     
-describe 'POST /db/products/:handle/purchase', ->
-  
-  beforeEach utils.wrap ->
-    yield utils.clearModels([User, Payment])
-    yield utils.populateProducts()
-    @user = yield utils.initUser()
-    yield utils.loginUser(@user)
-    spyOn(stripe.customers, 'create').and.callFake (newCustomer, cb) -> cb(null, {id: 'cus_1'})
-    spyOn(libUtils, 'findStripeSubscriptionAsync').and.returnValue(Promise.resolve(null))
-    spyOn(stripe.charges, 'create').and.callFake (opts, cb) -> 
-      cb(null, _.assign({id: 'charge_1'}, _.pick(opts, 'metadata', 'amount', 'customer')))
-    
-    
-  it 'allows purchase of a year subscription', utils.wrap ->
-    url = utils.getURL('/db/products/year_subscription/purchase')
-    json = {stripe: { token: '1', timestamp: new Date() }}
-    [res, body] = yield request.postAsync({url, json})
-    expect(moment(res.body.stripe.free).isAfter(moment().add(1, 'year').subtract(1, 'day'))).toBe(true)
-    expect(res.statusCode).toBe(200)
-
-  it 'allows purchase of a lifetime subscription', utils.wrap ->
-    url = utils.getURL('/db/products/lifetime_subscription/purchase')
-    json = {stripe: { token: '1', timestamp: new Date() }}
-    [res, body] = yield request.postAsync({url, json})
-    expect(res.body.stripe.free).toBe(true)
-    expect(res.statusCode).toBe(200)
-    product = yield Product.findOne({name:'lifetime_subscription'})
-    payment = yield Payment.findOne()
-    expect(product.get('amount')).toBe(payment.get('amount'))

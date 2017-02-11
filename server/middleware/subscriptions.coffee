@@ -205,24 +205,25 @@ unsubscribeUser = co.wrap (req, user) ->
 
 
 purchaseProduct = expressWrap (req, res) ->
-  productName = req.params.handle or 'year_subscription' 
+  product = yield database.getDocFromHandle(req, Product)
+  product ?= yield Product.findOne({name: req.params.handle})
+  if not product
+    throw new errors.NotFound('Product not found')
+  productName = product?.get('name')
   if req.user.get('stripe.sponsorID')
     throw new errors.Forbidden('Sponsored subscribers may not purchase products.')
   unless productName in ['year_subscription', 'lifetime_subscription']
     throw new errors.UnprocessableEntity('Unsupported product')
-  customer = yield StripeUtils.getCustomerAsync(req.user, req.body.stripe?.token)
+  customer = yield StripeUtils.getCustomerAsync(req.user, req.body.stripe?.token or req.body.token)
   subscription = yield libUtils.findStripeSubscriptionAsync(customer.id, {subscriptionID: req.user.get('stripe')?.subscriptionID})
   stripeSubscriptionPeriodEndDate = new Date(subscription.current_period_end * 1000) if subscription
   yield StripeUtils.cancelSubscriptionImmediatelyAsync(req.user, subscription)
-  product = yield Product.findOne({name: productName})
-  if not product
-    throw new errors.NotFound('Product not found')
   
   metadata = {
     type: req.body.type
     userID: req.user.id
     gems: product.get('gems')
-    timestamp: parseInt(req.body.stripe?.timestamp)
+    timestamp: parseInt(req.body.stripe?.timestamp or req.body.timestamp)
     description: req.body.description
   }
 
